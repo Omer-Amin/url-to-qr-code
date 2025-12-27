@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="description" content="Convert URLs to QR codes | Free, no signup, no download">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="manifest" href="/site.webmanifest">
   <title>URL2QR</title>
   <style>
     :root{
@@ -79,8 +84,18 @@
       color:var(--text);
       cursor:pointer;
       white-space:nowrap;
+
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
     }
     button:disabled{ opacity:.45; cursor:not-allowed; }
+
+    .btn-hint{
+      font-size:12px;
+      color:var(--placeholder);
+      user-select:none;
+    }
 
     .qrbox{
       display:flex;
@@ -192,8 +207,11 @@
         </div>
 
         <div class="actions">
-          <button id="copy" type="button" disabled>Copy PNG</button>
-          <button id="dl" type="button" disabled>Download PNG</button>
+          <button id="copy" type="button" disabled>
+            <span class="btn-label">Copy</span>
+            <span id="copyHint" class="btn-hint" hidden aria-hidden="true"></span>
+          </button>
+          <button id="dl" type="button" disabled>Download</button>
         </div>
       </div>
     </div>
@@ -218,8 +236,22 @@
     const qrEl = $("#qr");
     const placeholderEl = $("#qrPlaceholder");
     const copyBtn = $("#copy");
+    const copyHint = $("#copyHint");
     const dlBtn = $("#dl");
     const toastEl = $("#toast");
+
+    const isMobileOrTablet =
+      (window.matchMedia && window.matchMedia("(pointer:coarse)").matches) ||
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    const isMacDesktop =
+      !isMobileOrTablet &&
+      /(Mac|MacIntel|MacPPC|Mac68K)/i.test(navigator.platform);
+
+    if (!isMobileOrTablet) {
+      copyHint.hidden = false;
+      copyHint.textContent = `${isMacDesktop ? "⌘ " : "Ctrl+"}C`;
+    }
 
     let toastTimer = null;
     function showToast(msg){
@@ -232,9 +264,11 @@
     function normalizeUrl(v){
       const value = (v || "").trim();
       if (!value) return "";
-      if (!/^https?:\/\//i.test(value)) return "";
+
+      const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+
       try {
-        const u = new URL(value);
+        const u = new URL(withScheme);
         if (u.protocol !== "http:" && u.protocol !== "https:") return "";
         return u.toString();
       } catch {
@@ -314,6 +348,7 @@
         }
       });
     }
+
     urlEl.addEventListener("input", () => {
       if (!normalizeUrl(urlEl.value)) {
         clearQR();
@@ -326,20 +361,7 @@
       if (e.key === "Enter") generate();
     });
 
-    dlBtn.addEventListener("click", () => {
-      const node = getRenderable();
-      const url = renderableToDataUrl(node);
-      if (!url) return;
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "qr.png";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    });
-
-    copyBtn.addEventListener("click", () => {
+    function doCopy(){
       const node = getRenderable();
       if (!node) return;
 
@@ -366,6 +388,51 @@
       } catch {
         showToast("Not copied");
       }
+    }
+
+    copyBtn.addEventListener("click", doCopy);
+
+    function hasHighlightedText(){
+      const sel = window.getSelection?.();
+      if (sel && sel.toString().length > 0) return true;
+
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+        if (typeof el.selectionStart === "number" && typeof el.selectionEnd === "number") {
+          return el.selectionStart !== el.selectionEnd;
+        }
+      }
+      return false;
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.defaultPrevented) return;
+
+      const key = (e.key || "").toLowerCase();
+      if (key !== "c") return;
+
+      const modPressed = isMacDesktop ? e.metaKey : e.ctrlKey;
+      if (!modPressed || e.altKey || e.shiftKey) return;
+
+      if (hasHighlightedText()) return;
+
+      if (!getRenderable()) return;
+
+      e.preventDefault();
+      doCopy();
+    }, true);
+
+    dlBtn.addEventListener("click", () => {
+      const node = getRenderable();
+      const url = renderableToDataUrl(node);
+      if (!url) return;
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "qr.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     });
 
     clearQR();
